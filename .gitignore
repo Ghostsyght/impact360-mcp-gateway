@@ -3,3 +3,7 @@ dist/
 .wrangler/
 .dev.vars
 *.log
+
+# Temporarily allow built worker for CF deploy
+!dist/
+!dist/worker.min.js
