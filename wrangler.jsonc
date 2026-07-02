@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "impact360-mcp-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  }
+  // No [[durable_objects.bindings]] or [[migrations]] — this server is stateless
+  // (createMcpHandler, fresh McpServer per request), so it runs on the free
+  // Workers plan with no Durable Objects required.
+}

@@ -1,0 +1,41 @@
+# Copy this file to .dev.vars for local `wrangler dev` testing.
+# In production, set each of these with: wrangler secret put <NAME>
+# A service is skipped entirely (no tools registered) if its required vars are missing —
+# you can deploy with only some of these filled in and add the rest later.
+
+# --- Gateway access control (always required) ---
+# Shared secret callers send as "Authorization: Bearer <token>". Generate with:
+#   openssl rand -hex 32
+MCP_ACCESS_TOKEN=
+
+# --- Cloudflare Access (optional — only once you put Access in front of this Worker) ---
+# Both values are shown in the dashboard when you enable Access on the Worker.
+CF_ACCESS_TEAM_DOMAIN=
+CF_ACCESS_AUD=
+
+# --- HaloPSA ---
+# Find these in HaloPSA: Configuration > Integrations > Halo API > API Details
+HALO_AUTH_URL=https://yourcompany.halopsa.com/auth
+HALO_RESOURCE_URL=https://yourcompany.halopsa.com/api
+HALO_TENANT=
+HALO_CLIENT_ID=
+HALO_CLIENT_SECRET=
+HALO_SCOPE=all
+
+# --- N-able N-central ---
+# Base URL of your N-central server (no trailing slash)
+NABLE_BASE_URL=https://nc.yourmsp.com
+# Generate in N-central: Administration > User Management > Users >
+# (your API-only user) > API Access > Generate JSON Web Token
+NABLE_JWT=
+
+# --- UniFi Site Manager ---
+# Generate at unifi.ui.com > Settings > API Keys
+UNIFI_API_KEY=
+
+# --- Meraki Dashboard ---
+# Generate at dashboard.meraki.com > Organization > Settings > Dashboard API access
+MERAKI_API_KEY=
+# Optional — skip organization_id on every Meraki tool call by setting a default.
+# Find it by calling meraki_list_organizations once without this set.
+MERAKI_DEFAULT_ORG_ID=
