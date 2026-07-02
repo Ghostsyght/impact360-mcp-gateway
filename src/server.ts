@@ -4,11 +4,12 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Env, isHaloConfigured, isMerakiConfigured, isNableConfigured, isUnifiConfigured } from "./env.js";
+import { Env, isHaloConfigured, isMerakiConfigured, isNableConfigured, isSentinelOneConfigured, isUnifiConfigured } from "./env.js";
 import { registerHaloTools } from "./services/halo.js";
 import { registerNableTools } from "./services/nable.js";
 import { registerUnifiTools } from "./services/unifi.js";
 import { registerMerakiTools } from "./services/meraki.js";
+import { registerSentinelOneTools } from "./services/sentinelone.js";
 
 export function buildMcpServer(env: Env): McpServer {
   const server = new McpServer({
@@ -34,6 +35,11 @@ export function buildMcpServer(env: Env): McpServer {
   if (isMerakiConfigured(env)) {
     registerMerakiTools(server, env);
     console.log("[gateway] Meraki Dashboard tools registered (5 tools)");
+  }
+
+  if (isSentinelOneConfigured(env)) {
+    registerSentinelOneTools(server, env);
+    console.log("[gateway] SentinelOne tools registered (8 tools)");
   }
 
   return server;

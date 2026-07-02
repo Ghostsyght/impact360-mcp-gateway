@@ -39,3 +39,12 @@ MERAKI_API_KEY=
 # Optional — skip organization_id on every Meraki tool call by setting a default.
 # Find it by calling meraki_list_organizations once without this set.
 MERAKI_DEFAULT_ORG_ID=
+
+# --- SentinelOne ---
+# Base URL of your management console (no trailing slash), e.g. https://usea1-partners.sentinelone.net
+S1_BASE_URL=https://yourcompany.sentinelone.net
+# API token — generate a Service User token (recommended) or a personal token.
+# Service User: Settings > Users > Service Users > Actions > Create New Service User,
+#   then copy the token shown on creation (shown once only).
+# Personal token: click your username (top right) > My User > Actions > API Token Operations > Generate API Token.
+S1_API_TOKEN=

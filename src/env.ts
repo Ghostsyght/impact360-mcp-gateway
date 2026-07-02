@@ -24,6 +24,10 @@ export interface Env {
   // Meraki Dashboard
   MERAKI_API_KEY?: string;
   MERAKI_DEFAULT_ORG_ID?: string;
+
+  // SentinelOne
+  S1_BASE_URL?: string;
+  S1_API_TOKEN?: string;
 }
 
 export function isHaloConfigured(env: Env): boolean {
@@ -45,6 +49,10 @@ export function isUnifiConfigured(env: Env): boolean {
 
 export function isMerakiConfigured(env: Env): boolean {
   return !!env.MERAKI_API_KEY;
+}
+
+export function isSentinelOneConfigured(env: Env): boolean {
+  return !!(env.S1_BASE_URL && env.S1_API_TOKEN);
 }
 
 export function isCfAccessConfigured(env: Env): boolean {
