@@ -3,11 +3,32 @@
   "name": "impact360-mcp-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "observability": {
     "enabled": true
-  }
-  // No [[durable_objects.bindings]] or [[migrations]] — this server is stateless
-  // (createMcpHandler, fresh McpServer per request), so it runs on the free
-  // Workers plan with no Durable Objects required.
+  },
+  "vars": {
+    "UNIFI_NETWORK_TOOL_PERMISSION_MODE": "confirm",
+    "UNIFI_POLICY_NETWORK_CREATE": "true",
+    "UNIFI_POLICY_NETWORK_UPDATE": "true",
+    "UNIFI_POLICY_NETWORK_DELETE": "false"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "UNIFI_APPROVALS",
+        "class_name": "UnifiApproval"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "unifi-approvals-v1",
+      "new_sqlite_classes": [
+        "UnifiApproval"
+      ]
+    }
+  ]
 }
