@@ -26,8 +26,10 @@ within the Cloudflare build environment, not services on an employee computer.
 
 ## Preview versus release
 
-The non-production branch trigger may upload a version using
-`npx wrangler versions upload` after the build succeeds. Uploading a version is not
+The non-production branch trigger uploads through `npm run upload:preview` after
+the build succeeds. It uses the Cloudflare version API to inherit all bindings
+from the specifically identified serving version, checks parity afterward, and
+verifies serving traffic was unchanged. Uploading a version is not
 approval to deploy it to serving traffic. Inspect the build log, commit and version
 before a release proposal. Preserve Worker bindings and the existing approval
 Durable Object class/migration; no delete or storage reset is authorized.
@@ -40,7 +42,10 @@ and content endpoints can describe the most recently uploaded version, which may
 be an unserved preview. Never use them alone as evidence of production configuration.
 
 A preview missing existing bindings must be repaired from a verified serving
-version without exporting secret values, then revalidated. Keep customer-specific
+version without exporting secret values, then revalidated. The preview uploader
+rejects runtime, variable or Durable Object configuration changes that require a
+separate migration/release. It never guesses migrations from the latest upload.
+Keep customer-specific
 non-secret configuration out of public source as well.
 
 The deployed recovered source differs from `main`. Do not deploy the older `main`

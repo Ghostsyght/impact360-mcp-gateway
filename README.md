@@ -40,7 +40,9 @@ Employee login, upstream backend authentication, and administrator capability sy
 are separate operations. With portal `on_behalf=false`, a backend bearer credential
 identifies a service connection; it does not prove an individual employee identity.
 Signed Cloudflare Access assertions are validated against the configured issuer,
-audience, algorithm, subject and expiry when that optional backend path is enabled.
+audience, algorithm and expiry when that optional backend path is enabled. A signed
+employee subject remains distinct from a signed service-token common name; service
+tokens cannot establish employee approval identity.
 
 UniFi create/update require an exact preview, explicit confirmation, enabled policy
 gates and an expiring single-use approval. Delete and device/client/port actions

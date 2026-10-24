@@ -12,7 +12,8 @@
     "build": "wrangler deploy --dry-run --outdir dist",
     "test:unifi": "node tests/unifi.test.mjs",
     "test:worker": "node tests/worker.test.mjs",
-    "check:cloud": "node scripts/check-cloud.mjs"
+    "check:cloud": "node scripts/check-cloud.mjs",
+    "upload:preview": "node scripts/upload-preview.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

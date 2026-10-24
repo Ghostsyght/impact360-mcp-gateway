@@ -95,6 +95,17 @@ try {
     ];
     for(const token of tokens)assert.equal((await request("/auth",{"Cf-Access-Jwt-Assertion":token})).status,401);
   });
+  await test("signed Access service JWTs retain backend authentication without employee attribution",async()=>{
+    const token=await new SignJWT({type:"app",sub:"",common_name:"test-service.access"})
+      .setProtectedHeader({alg:"RS256",kid:"cloud-test"}).setIssuer(issuer)
+      .setAudience("expected-audience").setIssuedAt().setExpirationTime("5m").sign(privateKey);
+    const r=await request("/auth",{"Cf-Access-Jwt-Assertion":token});assert.equal(r.status,200);
+    assert.deepEqual(await r.json(),{kind:"service_connection",id:issuer+":service:test-service.access"});
+    const noIdentity=await new SignJWT({type:"app",sub:"",common_name:""})
+      .setProtectedHeader({alg:"RS256",kid:"cloud-test"}).setIssuer(issuer)
+      .setAudience("expected-audience").setExpirationTime("5m").sign(privateKey);
+    assert.equal((await request("/auth",{"Cf-Access-Jwt-Assertion":noIdentity})).status,401);
+  });
   await test("oversized assertions fail closed without exposing them",async()=>{
     const r=await request("/auth",{"Cf-Access-Jwt-Assertion":"x".repeat(16385)});assert.equal(r.status,401);
     assert.deepEqual(await r.json(),{error:"Unauthorized"});

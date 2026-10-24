@@ -55,10 +55,17 @@ export async function authenticateGateway(request: Request, env: GatewayAuthEnv)
     }
     const { payload } = await jwtVerify(assertion, keys, {
       issuer, audience: env.CF_ACCESS_AUD, algorithms: ["RS256"],
-      requiredClaims: ["sub", "exp"], clockTolerance: 5,
+      requiredClaims: ["exp"], clockTolerance: 5,
     });
-    if (typeof payload.sub !== "string" || !payload.sub) return null;
-    return { kind: "access_identity", id: `${issuer}:${payload.sub}` };
+    if (typeof payload.sub === "string" && payload.sub) {
+      return { kind: "access_identity", id: `${issuer}:${payload.sub}` };
+    }
+    // Access service-token assertions document an empty subject and a signed
+    // common_name. Preserve protected backend traffic without labeling it a user.
+    if (payload.type === "app" && payload.sub === "" && typeof payload.common_name === "string" && payload.common_name) {
+      return { kind: "service_connection", id: `${issuer}:service:${payload.common_name}` };
+    }
+    return null;
   } catch {
     // Never return JWTs, signing-key responses, or verification internals to a client.
     return null;
