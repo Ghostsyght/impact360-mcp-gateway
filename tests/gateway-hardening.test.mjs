@@ -1,8 +1,7 @@
 // Run in Cloudflare Builds. This is an isolated workerd test, not a vendor request.
 import assert from "node:assert/strict";
 import { build } from "esbuild";
-import { Miniflare } from "miniflare";
-import { MockAgent } from "undici";
+import { Miniflare, Response as FixtureResponse } from "miniflare";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { fileURLToPath } from "node:url";
 
@@ -32,24 +31,42 @@ const compiled = await build({
   bundle: true, platform: "neutral", format: "esm", write: false,
   conditions: ["workerd", "worker", "browser"], external: ["cloudflare:workers"],
 });
-const mocks = new MockAgent();
-mocks.disableNetConnect();
+const responses = [];
+const vendorCalls = [];
+let unexpectedOrigins = 0;
+let jwksRequests = 0;
 const mf = new Miniflare({
   modules: true, script: compiled.outputFiles[0].text,
   compatibilityDate: "2026-06-01", compatibilityFlags: ["nodejs_compat"],
   bindings: { MCP_ACCESS_TOKEN: "test-bearer", CF_ACCESS_TEAM_DOMAIN: "test-team.cloudflareaccess.com", CF_ACCESS_AUD: "expected-audience" },
-  fetchMock: mocks,
+  // Return raw responses so Node's fetch bridge cannot follow a mock redirect
+  // before workerd gets to enforce redirect:"manual". No real network is used.
+  outboundService: async request => {
+    const url = new URL(request.url);
+    if (url.origin === issuer && url.pathname === "/cdn-cgi/access/certs") {
+      jwksRequests++;
+      return new FixtureResponse(JSON.stringify({keys:[jwk]}), {headers:{"Content-Type":"application/json"}});
+    }
+    if (url.origin !== "https://vendor.example" || url.pathname !== "/v1/data") {
+      unexpectedOrigins++;
+      return new FixtureResponse("Unexpected outbound destination", {status:500});
+    }
+    const fixture = responses.shift();
+    assert(fixture, "Unexpected extra vendor request, including an automatic retry");
+    assert.equal(request.method, fixture.method);
+    vendorCalls.push({method:request.method,url:request.url});
+    return new FixtureResponse(fixture.status === 204 ? null : fixture.body, {
+      status:fixture.status, ...fixture.options,
+    });
+  },
 });
-mocks.get(issuer).intercept({path:"/cdn-cgi/access/certs",method:"GET"})
-  .reply(200, JSON.stringify({keys:[jwk]}), {headers:{"Content-Type":"application/json"}}).times(1);
 const sign = async (claims = {}) => new SignJWT({sub:"employee-a", ...claims})
   .setProtectedHeader({alg:"RS256",kid:"cloud-test"}).setIssuer(issuer)
   .setAudience("expected-audience").setIssuedAt().setExpirationTime("5m").sign(privateKey);
 const request = (path, headers = {}) => mf.dispatchFetch(`https://test.invalid${path}`, {headers});
 let passed = 0;
 const test = async (name, fn) => { await fn(); passed++; console.log(`PASS ${name}`); };
-const reply = (status, body, options = {}, method = "GET") => mocks.get("https://vendor.example")
-  .intercept({path:"/v1/data",method}).reply(status,body,options);
+const reply = (status, body, options = {}, method = "GET") => responses.push({status,body,options,method});
 try {
   await test("absent credentials and spoofed employee headers are denied",async()=>{
     assert.equal((await request("/auth",{"X-Forwarded-User-Agent":"boss@example.invalid"})).status,401);
@@ -87,9 +104,11 @@ try {
     reply(204,"");assert.deepEqual(await (await request("/read")).json(),{data:{}});
   });
   await test("redirects are rejected without forwarding credentials",async()=>{
+    const callsBefore=vendorCalls.length;
     reply(302,"never-return-this-secret",{headers:{Location:"https://other.example/collect"}});
     const r=await request("/read");assert.equal(r.status,502);const body=await r.text();
-    assert(body.includes("HTTP 302"));assert(!body.includes("never-return-this-secret"));
+    assert(body.includes("HTTP 302"),body);assert(!body.includes("never-return-this-secret"));
+    assert.equal(vendorCalls.length,callsBefore+1);assert.equal(unexpectedOrigins,0);
   });
   await test("upstream errors never include the response body",async()=>{
     reply(429,"private-vendor-body-token");const r=await request("/read");assert.equal(r.status,502);
@@ -111,5 +130,8 @@ try {
     assert.match((await (await request("/insecure")).json()).error,/HTTPS/);
     assert.match((await (await request("/cancelled")).json()).error,/cancelled/);
   });
+  await test("all fixtures are consumed with one cached JWKS request and no unexpected origins",()=>{
+    assert.equal(responses.length,0);assert.equal(jwksRequests,1);assert.equal(unexpectedOrigins,0);
+  });
   console.log(JSON.stringify({gateway_hardening:passed,live_vendor_requests:0,live_mutations:0}));
-} finally { await mf.dispose(); await mocks.close(); }
+} finally { await mf.dispose(); }
