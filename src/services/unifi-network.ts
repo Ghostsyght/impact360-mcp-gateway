@@ -53,6 +53,6 @@ export function registerExpandedUnifiTools(server:McpServer,env:UnifiEnv){
   await stub.consume(owner(env));
   let response;try{response=await requestNetwork(env.UNIFI_API_KEY,p.target,doc);}catch{throw Error("Mutation response is uncertain or failed. The token is consumed and will not be retried. Read the live resource before preparing another change.");}
   let readback:unknown=null;if(p.policy==="update"){try{readback=await beforeState(env,p.target,doc);}catch{readback={status:"readback_failed",guidance:"Inspect live state before further writes."};}}
-  return result({status:"submitted",operation:doc.slug,console_id:p.target.console_id,response,readback,readback_available:readback!==null && !(readback as {status?:string}).status,coverage:"No packet-level behavior or network enforcement was tested."});
+  return result({status:"submitted",operation:doc.slug,console_id:p.target.console_id,parameters:p.target.parameters,response,readback,readback_available:readback!==null && !(readback as {status?:string}).status,coverage:"No packet-level behavior or network enforcement was tested."});
  }catch(e){return failure(e);}});
 }

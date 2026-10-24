@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "impact360-mcp-gateway",
   "main": "src/index.ts",
+  "keep_vars": true,
   "compatibility_date": "2026-06-01",
   "compatibility_flags": [
     "nodejs_compat"

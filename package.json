@@ -5,12 +5,15 @@
   "type": "module",
   "description": "Unified MCP gateway for HaloPSA, N-able N-central, UniFi Site Manager, and Meraki Dashboard, deployed as a single Cloudflare Worker",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "node scripts/cloud-only.mjs",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "tail": "wrangler tail",
     "build": "wrangler deploy --dry-run --outdir dist",
-    "test:unifi": "node tests/unifi.test.mjs"
+    "test:unifi": "node tests/unifi.test.mjs",
+    "test:worker": "node tests/worker.test.mjs",
+    "check:cloud": "node scripts/check-cloud.mjs",
+    "upload:preview": "node scripts/upload-preview.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
