@@ -18,6 +18,10 @@ export interface JsonRequestInit extends RequestInit {
   responseMode?: "json" | "acknowledgement";
 }
 
+async function discardBody(response: Response): Promise<void> {
+  try { await response.body?.cancel(); } catch { /* Cleanup cannot replace a known status. */ }
+}
+
 export async function fetchJson<T = unknown>(
   url: string,
   init: JsonRequestInit = {}
@@ -35,19 +39,19 @@ export async function fetchJson<T = unknown>(
     const { responseMode = "json", ...requestInit } = init;
     const res = await fetch(target, { ...requestInit, headers, signal, redirect: "manual" });
     if (!res.ok) {
-      await res.body?.cancel();
+      await discardBody(res);
       throw new ApiError(res.status, "", `Upstream returned HTTP ${res.status}. No automatic retries were made.`);
     }
     if (res.status === 204) return {} as T;
     // Some command endpoints acknowledge with an empty/text 200 or 202 body.
     // Status acceptance is enough for those callers; never reinterpret it as failure.
     if (responseMode === "acknowledgement") {
-      await res.body?.cancel();
+      await discardBody(res);
       return { accepted: true, status: res.status } as T;
     }
     const maximum = 4 * 1024 * 1024;
     if (Number(res.headers.get("Content-Length")) > maximum) {
-      await res.body?.cancel();
+      await discardBody(res);
       throw new ApiError(res.status, "", "Upstream response exceeds 4 MiB. Request a smaller page.");
     }
     const reader = res.body?.getReader();
@@ -60,7 +64,7 @@ export async function fetchJson<T = unknown>(
         if (chunk.done) break;
         size += chunk.value.byteLength;
         if (size > maximum) {
-          await reader.cancel();
+          try { await reader.cancel(); } catch { /* Preserve the size-limit error. */ }
           throw new ApiError(res.status, "", "Upstream response exceeds 4 MiB. Request a smaller page.");
         }
         chunks.push(chunk.value);
