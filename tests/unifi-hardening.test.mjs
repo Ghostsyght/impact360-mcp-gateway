@@ -89,6 +89,14 @@ try {
     const response = await call("unifi_docs_get_endpoint", { endpoint: "network/updatefirewallpolicy" });
     assert(!response.isError);
     assert(bytes(response.structuredContent) <= 8192);
+    const oldOutput = { data: docs.getDoc("updatefirewallpolicy") };
+    const oldWire = { content: [{ type: "text", text: JSON.stringify(oldOutput, null, 2) }], structuredContent: oldOutput };
+    const baselineBytes = bytes(oldWire), summaryBytes = bytes(response);
+    console.log(JSON.stringify({ documentation_payload_benchmark: {
+      endpoint: "updatefirewallpolicy", units: "UTF-8 bytes", baseline_response_bytes: baselineBytes,
+      summary_response_bytes: summaryBytes, reduction_percent: Number((100 * (1 - summaryBytes / baselineBytes)).toFixed(2)),
+      model_tokens_measured: false, scope: "one large documentation response, not overall Orbit usage"
+    } }));
     const view = response.structuredContent.data;
     assert.equal(view.section, "summary");
     assert.equal(view.examples, undefined);
