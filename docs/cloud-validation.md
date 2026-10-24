@@ -18,7 +18,8 @@ build environment or commit `.dev.vars`/`.env` files.
    cancellation and safe command acknowledgments. Outbound vendor calls are mocked.
 5. `wrangler deploy --dry-run --outdir dist` to build the actual Worker entrypoint.
 6. Complete Worker HTTP tests for bearer authentication, MCP initialization,
-   18 UniFi tools, documentation retrieval and delete denial.
+   all 52 configured gateway tools (20 Halo, 6 N-central, 8 SentinelOne and
+   18 UniFi), documentation retrieval and delete denial. Outbound network is blocked.
 
 There is no MCP listener in this workflow. Test Workers are isolated fixtures
 within the Cloudflare build environment, not services on an employee computer.
@@ -30,6 +31,17 @@ The non-production branch trigger may upload a version using
 approval to deploy it to serving traffic. Inspect the build log, commit and version
 before a release proposal. Preserve Worker bindings and the existing approval
 Durable Object class/migration; no delete or storage reset is authorized.
+
+`keep_vars: true` preserves dashboard-managed variables in future uploads. It does
+not recover variables already omitted by an older preview. Before promotion,
+compare version-specific bindings with the *serving* version, including names,
+types, non-secret values and Durable Object identity. The general script settings
+and content endpoints can describe the most recently uploaded version, which may
+be an unserved preview. Never use them alone as evidence of production configuration.
+
+A preview missing existing bindings must be repaired from a verified serving
+version without exporting secret values, then revalidated. Keep customer-specific
+non-secret configuration out of public source as well.
 
 The deployed recovered source differs from `main`. Do not deploy the older `main`
 or merge the hardening branch directly into it without reconciling the recovered
