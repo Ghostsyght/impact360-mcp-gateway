@@ -1,10 +1,11 @@
 // @ts-nocheck
-// Recovered verbatim application sections from production version eb3af49a.
-// Dependency bundle is rebuilt; vendor application behavior is preserved.
+// Recovered application sections from production version eb3af49a.
+// Vendor adapters remain preserved; typed authentication/HTTP boundaries are extracted.
 import { createMcpHandler } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as external_exports from "zod";
-import { importJWK, jwtVerify } from "jose";
+import { authenticateGateway } from "./lib/gateway-auth.js";
+import { fetchJson, formatError as formatError2 } from "./lib/http.js";
 import { registerExpandedUnifiTools } from "./services/unifi-network.js";
 const __name = (value, name) => Object.defineProperty(value, "name", {value:name, configurable:true});
 // src/env.ts
@@ -34,54 +35,7 @@ function isCfAccessConfigured(env2) {
 __name(isCfAccessConfigured, "isCfAccessConfigured");
 
 
-// src/lib/http.ts
-var ApiError = class extends Error {
-  constructor(status, body, message2) {
-    super(message2);
-    this.status = status;
-    this.body = body;
-    this.name = "ApiError";
-  }
-  status;
-  body;
-  static {
-    __name(this, "ApiError");
-  }
-};
-async function fetchJson(url2, init = {}) {
-  const res = await fetch(url2, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...init.headers
-    }
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      text,
-      `HTTP ${res.status} from ${url2}: ${text.slice(0, 300)}`
-    );
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-__name(fetchJson, "fetchJson");
-function formatError2(err) {
-  if (err instanceof ApiError) {
-    return `Error ${err.status}: ${err.body.slice(0, 500)}`;
-  }
-  if (err instanceof Error) {
-    return `Error: ${err.message}`;
-  }
-  return `Unknown error: ${String(err)}`;
-}
-__name(formatError2, "formatError");
+// src/lib/http.ts: active adapters use the typed, bounded shared helper.
 
 
 // src/services/halo.ts
@@ -724,7 +678,7 @@ function registerNableTools(server, env2) {
   }, async ({ device_id, task_id }) => {
     try {
       await nableFetch(env2, `/api/devices/${device_id}/scheduled-tasks/${task_id}/run`, {
-        method: "POST"
+        method: "POST", responseMode: "acknowledgement"
       });
       return { content: [{ type: "text", text: `Task ${task_id} triggered on device ${device_id}.` }] };
     } catch (e2) {
@@ -1184,7 +1138,7 @@ function registerSentinelOneTools(server, env2) {
     try {
       const ids = threat_ids.split(",").map((s2) => s2.trim());
       await s1Fetch(env2, "/threats/analyst-verdict", {
-        method: "POST",
+        method: "POST", responseMode: "acknowledgement",
         body: JSON.stringify({
           filter: { ids },
           data: { analystVerdict: verdict }
@@ -1273,7 +1227,7 @@ function registerSentinelOneTools(server, env2) {
     try {
       const ids = agent_ids.split(",").map((s2) => s2.trim());
       await s1Fetch(env2, "/agents/actions/disconnect", {
-        method: "POST",
+        method: "POST", responseMode: "acknowledgement",
         body: JSON.stringify({ filter: { ids } })
       });
       return { content: [{ type: "text", text: `Isolation command sent to agents: ${agent_ids}` }] };
@@ -1318,39 +1272,17 @@ __name(buildMcpServer, "buildMcpServer");
 
 
 // src/index.ts
-async function verifyCfAccessJwt(env2, token) {
-  try {
-    const certsUrl = `https://${env2.CF_ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
-    const res = await fetch(certsUrl);
-    if (!res.ok) return false;
-    const { keys } = await res.json();
-    for (const jwk of keys) {
-      try {
-        const key = await importJWK(jwk, "RS256");
-        await jwtVerify(token, key, { audience: env2.CF_ACCESS_AUD });
-        return true;
-      } catch {
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-__name(verifyCfAccessJwt, "verifyCfAccessJwt");
 async function isAuthorized(request, env2) {
-  const authHeader = request.headers.get("Authorization") ?? "";
-  if (authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    if (token === env2.MCP_ACCESS_TOKEN) return true;
-  }
-  if (isCfAccessConfigured(env2)) {
-    const cfJwt = request.headers.get("Cf-Access-Jwt-Assertion");
-    if (cfJwt && await verifyCfAccessJwt(env2, cfJwt)) return true;
-  }
-  return false;
+  return Boolean(await authenticateGateway(request, env2));
 }
 __name(isAuthorized, "isAuthorized");
+async function handleAuthorized(request, env2, ctx) {
+  if (new URL(request.url).pathname === "/mcp") {
+    const mcpServer = buildMcpServer(env2);
+    return createMcpHandler(mcpServer, { route: "/mcp" })(request, env2, ctx);
+  }
+  return new Response("Not Found", { status: 404 });
+}
 var index_default = {
   async fetch(request, env2, _ctx) {
     const url2 = new URL(request.url);
@@ -1365,14 +1297,9 @@ var index_default = {
         headers: { "Content-Type": "application/json" }
       });
     }
-    if (url2.pathname === "/mcp") {
-      const mcpServer = buildMcpServer(env2);
-      const handleMcp = createMcpHandler(mcpServer, { route: "/mcp" });
-      return handleMcp(request, env2, _ctx);
-    }
-    return new Response("Not Found", { status: 404 });
+    return handleAuthorized(request, env2, _ctx);
   }
 };
 
-export { buildMcpServer, isAuthorized };
+export { buildMcpServer, isAuthorized, handleAuthorized };
 export default index_default;

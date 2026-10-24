@@ -1,5 +1,5 @@
 export type Json = null | boolean | number | string | Json[] | {[key:string]:Json};
-export interface DocField { name:string; required?:boolean; type?:string|null; description?:string|null; children?:DocField[]|null; discriminator?:{value:string;schema?:DocField[]|null}[]|null }
+export interface DocField { name:string; required?:boolean; type?:string|null; description?:string|null; children?:DocField[]|null; discriminator?:{value:string;schema?:DocField[]|null}[]|null; enum?:Json[]|null; [key:string]:unknown }
 export interface ApiDoc { slug:string; h1?:string; method?:string; path?:string; description?:string; type?:string; content?:string; sourceUrl?:string; pathParameters?:DocField[]; queryParameters?:DocField[]; requestBody?:DocField[]; responses?:unknown; examples?:Record<string,Record<string,string>>; responseSample?:string|null; [key:string]:unknown }
 export const READ_ANNOTATIONS = {readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:true};
 export function canonical(value:unknown):string {
@@ -19,22 +19,59 @@ export function operationPolicy(doc:ApiDoc):"read"|"create"|"update"|"denied" {
  if((doc.method==="PUT" || doc.method==="PATCH") && /^(update|patch)[a-z]+$/.test(doc.slug))return "update";
  return "denied";
 }
+const supportedFieldKeys=new Set(["name","required","type","description","children","discriminator","enum"]);
+type FieldKind="string"|"boolean"|"integer"|"number"|"object";
+function fieldKind(type:string,path:string):FieldKind {
+ const match=/^(string|boolean|integer|number|object)(?:\s*\([^)]*\))?$/.exec(type.trim().toLowerCase());
+ if(!match)throw Error("Unsupported documented type at "+path+". This snapshot validator is not a complete OpenAPI validator.");
+ return match[1] as FieldKind;
+}
+function validatePrimitive(kind:FieldKind,value:unknown,path:string):void {
+ if(kind==="string"&&typeof value!=="string")throw Error(path+" must be a string.");
+ if(kind==="boolean"&&typeof value!=="boolean")throw Error(path+" must be boolean.");
+ if(kind==="integer"&&!Number.isSafeInteger(value))throw Error(path+" must be a safe integer.");
+ if(kind==="number"&&(typeof value!=="number"||!Number.isFinite(value)))throw Error(path+" must be numeric.");
+ if(kind==="object"&&(!value||typeof value!=="object"||Array.isArray(value)))throw Error(path+" must be an object.");
+}
+// Supports the explicit field types, enums and discriminator schemas in the pinned
+// documentation snapshot. New schema constraints fail closed; API-side semantic
+// validation, formats and cross-field rules are not claimed by this validator.
 export function validateFields(fields:DocField[],data:Record<string,unknown>,partial=false,prefix="body"):void {
  const effective=new Map(fields.map(f=>[f.name,f]));
- for(const f of fields){if(data[f.name]!==undefined && f.discriminator?.length){const variant=f.discriminator.find(d=>d.value===data[f.name]);if(!variant)throw Error("Invalid discriminator: "+prefix+"."+f.name);for(const x of variant.schema??[])effective.set(x.name,x);}}
+ for(const f of fields){if(data[f.name]!==undefined && f.discriminator?.length){
+  const variant=f.discriminator.find(d=>d.value===data[f.name]);
+  if(!variant)throw Error("Invalid discriminator: "+prefix+"."+f.name);
+  // Scraped pages repeat the initially selected variant at the top level. Do not
+  // accidentally allow those fields when a different discriminator is selected.
+  for(const alternative of f.discriminator)for(const x of alternative.schema??[])if(x.name!==f.name)effective.delete(x.name);
+  for(const x of variant.schema??[])effective.set(x.name,x);
+ }}
  for(const key of Object.keys(data))if(!effective.has(key))throw Error("Unknown "+prefix+" field: "+key+". Inspect the endpoint schema.");
  for(const f of effective.values()){
-  const value=data[f.name],path=prefix+"."+f.name,type=(f.type??"").toLowerCase();
+  const value=data[f.name],path=prefix+"."+f.name;
   if(value===undefined){if(f.required&&!partial)throw Error("Missing required field: "+path);continue;}
+  for(const key of Object.keys(f))if(!supportedFieldKeys.has(key))throw Error("Unsupported documented constraint "+key+" at "+path+". Inspect the schema before enabling this write.");
+  if(f.enum!=null){
+   if(!Array.isArray(f.enum)||!f.enum.length)throw Error("Unsupported documented enum at "+path+".");
+   if(!f.enum.some(allowed=>canonical(allowed)===canonical(value)))throw Error("Invalid enum value: "+path);
+  }
   if(value===null){if(f.required)throw Error(path+" cannot be null.");continue;}
-  if(type.startsWith("string")&&typeof value!=="string")throw Error(path+" must be a string.");
-  if(type.startsWith("boolean")&&typeof value!=="boolean")throw Error(path+" must be boolean.");
-  if(type.startsWith("integer")&&!Number.isInteger(value))throw Error(path+" must be an integer.");
-  if(type.startsWith("number")&&(typeof value!=="number"||!Number.isFinite(value)))throw Error(path+" must be numeric.");
-  if(type.startsWith("array")&&!Array.isArray(value))throw Error(path+" must be an array.");
-  if(type.startsWith("object")&&(typeof value!=="object"||Array.isArray(value)))throw Error(path+" must be an object.");
-  if(f.children?.length && Array.isArray(value)){for(const [i,item]of value.entries()){if(!item||typeof item!=="object"||Array.isArray(item))throw Error(path+" requires object items.");validateFields(f.children,item as Record<string,unknown>,partial,path+"["+i+"]");}}
-  else if(f.children?.length && typeof value==="object")validateFields(f.children,value as Record<string,unknown>,partial,path);
+  const type=(f.type??"").trim().toLowerCase();
+  const arrayType=/^array\s+of\s+(.+)$/.exec(type);
+  if(arrayType||type==="array"){
+   if(!Array.isArray(value))throw Error(path+" must be an array.");
+   const itemKind=arrayType?fieldKind(arrayType[1],path):f.children?.length?"object":null;
+   if(!itemKind)throw Error("Unsupported array item schema at "+path+".");
+   if(itemKind!=="object"&&f.children?.length)throw Error("Conflicting documented array schema at "+path+".");
+   for(const [i,item]of value.entries()){
+    const itemPath=path+"["+i+"]";validatePrimitive(itemKind,item,itemPath);
+    if(itemKind==="object"&&f.children?.length)validateFields(f.children,item as Record<string,unknown>,partial,itemPath);
+   }
+  }else{
+   const kind=fieldKind(type,path);validatePrimitive(kind,value,path);
+   if(kind!=="object"&&f.children?.length)throw Error("Conflicting documented field schema at "+path+".");
+   if(kind==="object"&&f.children?.length)validateFields(f.children,value as Record<string,unknown>,partial,path);
+  }
  }
 }
 export function resolvePath(doc:ApiDoc,parameters:Record<string,string>):string {
